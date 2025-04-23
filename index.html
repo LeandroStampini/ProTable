@@ -1,0 +1,101 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tabela</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+
+<body class="bg-white min-h-screen flex flex-col">
+  <!-- Barra superior -->
+  <header style="background-color: #1E88E5;" class="p-3 shadow-md flex items-center justify-between">
+    <div class="flex items-center w-full max-w-5xl mx-auto">
+      <a href="login.html" class="text-white font-bold text-xl mr-4">
+        <span class="text-gray-900">Pro</span>Table
+      </a>
+      <span class="pl-2 pr-2 text-white"><i class="fas fa-search"></i></span>
+      <input type="text" placeholder="Pesquisar..." class="rounded-full px-4 py-1 w-full focus:outline-none" />
+    </div>
+    <button id="menuBtn" class="text-white ml-3">
+      <i class="fas fa-bars text-xl"></i>
+    </button>
+  </header>
+
+  <!-- Tabela -->
+  <main class="flex-grow flex flex-col items-center justify-start mt-10 px-4">
+    <div class="w-full max-w-4xl mx-auto">
+      <h1 class="text-xl font-medium mb-6 text-center">Tabela - {{ table_name }}</h1>
+
+      <div class="w-full overflow-x-auto">
+        <table class="w-full border-collapse">
+          <thead>
+            <tr class="bg-blue-500 text-white">
+              <th style="background-color: #1E88E5;" class="text-left py-3 px-4 font-semibold">Campo</th>
+              <th style="background-color: #1E88E5;" class="text-left py-3 px-4 font-semibold">Descrição</th>
+            </tr>
+          </thead>
+          <tbody class="bg-gray-50">
+            {% if table_data %}
+              {% for row in table_data %}
+                <tr class="border-t border-gray-200">
+                  <td class="py-2 px-4">{{ row[0] }}</td>
+                  <td class="py-2 px-4">{{ row[1] }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr class="border-t border-gray-200">
+                <td colspan="2" class="py-2 px-4 text-center">Nenhum dado disponível</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Histórico de Pesquisa -->
+  <div id="modalHistorico" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-lg text-center">
+      <h2 class="text-xl font-bold mb-4">Histórico de pesquisa</h2>
+
+      <div class="flex items-center border rounded-full px-3 py-1 mb-4">
+        <i class="fas fa-search mr-2 text-gray-500"></i>
+        <input type="text" placeholder="Pesquisar" class="w-full focus:outline-none" />
+      </div>
+
+      <div class="border mb-4 py-2 px-3 rounded">
+        dd/mm/yyyy - Informação
+      </div>
+
+      <div class="flex justify-around">
+        <button onclick="fecharModal()" class="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-full">Fechar</button>
+        <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold px-4 py-2 rounded-full">Limpar Histórico</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById('modalHistorico');
+    const botaoMenu = document.getElementById('menuBtn');
+
+    botaoMenu.addEventListener('click', () => {
+      modal.classList.remove('hidden');
+    });
+
+    function fecharModal() {
+      modal.classList.add('hidden');
+    }
+
+    // Verifica se o usuário está logado
+    window.onload = function() {
+      const usuarioLogado = sessionStorage.getItem('usuarioLogado');
+      if (!usuarioLogado) {
+        window.location.href = 'login.html';
+      }
+    };
+  </script>
+</body>
+</html>
