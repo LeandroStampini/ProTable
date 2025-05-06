@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProTable - Login/Cadastro</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="h-screen w-screen flex">
+
+  <div style="background-color: #1E88E5;" class="w-1/2 flex items-center justify-center">
+    <h1 class="text-6xl font-bold text-white">
+      <span class="text-gray-900">Pro</span>Table
+    </h1>
+  </div>
+  <div class="w-1/2 bg-gray-100 flex items-center justify-center">
+    
+    <!-- Login -->
+    <div id="login" class="bg-white rounded-lg shadow-md p-8 w-80 text-center">
+      <h2 class="text-xl font-bold mb-6">LOGIN</h2>
+      <input type="text" id="loginUser" placeholder="Digite o nome do usuário..." class="w-full px-4 py-2 rounded-full border border-gray-300 mb-4" />
+      <input type="password" id="loginPass" placeholder="Digite a senha..." class="w-full px-4 py-2 rounded-full border border-gray-300 mb-4" />
+      <button onclick="login()" style="background-color: #1E88E5;" class="text-white font-bold px-6 py-2 rounded-full w-full mb-3">Entrar</button>
+      <p class="text-sm">Não tem conta? <a href="#" class="text-blue-500 font-semibold" onclick="toggleForm('cadastro')">Cadastrar.</a></p>
+    </div>
+
+    <!-- Cadastro -->
+    <div id="cadastro" class="bg-white rounded-lg shadow-md p-8 w-80 text-center hidden">
+      <h2 class="text-xl font-bold mb-6">CADASTRO</h2>
+      <input type="text" id="cadastroUser" placeholder="Digite o nome do usuário..." class="w-full px-4 py-2 rounded-full border border-gray-300 mb-3" />
+      <input type="password" id="cadastroPass" placeholder="Digite a senha..." class="w-full px-4 py-2 rounded-full border border-gray-300 mb-3" />
+      <input type="password" id="cadastroConfirmPass" placeholder="Confirme a senha..." class="w-full px-4 py-2 rounded-full border border-gray-300 mb-4" />
+      <button onclick="cadastrar()" style="background-color: #1E88E5;" class="text-white font-bold px-6 py-2 rounded-full w-full mb-3">Cadastrar</button>
+      <p class="text-sm">Já tem conta? <a href="#" class="text-blue-500 font-semibold" onclick="toggleForm('login')">Entrar.</a></p>
+    </div>
+  </div>
+
+  <script>
+    // Inicializa o armazenamento de usuários se não existir
+    if (!localStorage.getItem('usuarios')) {
+      localStorage.setItem('usuarios', JSON.stringify([]));
+    }
+
+    function toggleForm(form) {
+      const loginBox = document.getElementById('login');
+      const cadastroBox = document.getElementById('cadastro');
+      if (form === 'cadastro') {
+        loginBox.classList.add('hidden');
+        cadastroBox.classList.remove('hidden');
+      } else {
+        cadastroBox.classList.add('hidden');
+        loginBox.classList.remove('hidden');
+      }
+    }
+
+    function login() {
+      const user = document.getElementById('loginUser').value.trim();
+      const pass = document.getElementById('loginPass').value.trim();
+      
+      if (!user || !pass) {
+        alert('Por favor, preencha todos os campos!');
+        return;
+      }
+
+      const usuarios = JSON.parse(localStorage.getItem('usuarios'));
+      const usuarioEncontrado = usuarios.find(u => u.username === user && u.password === pass);
+      
+      if (usuarioEncontrado) {
+        // Salva o usuário na sessão
+        sessionStorage.setItem('usuarioLogado', JSON.stringify(usuarioEncontrado));
+        window.location.href = 'index.html';
+      } else {
+        alert('Usuário ou senha incorretos!');
+      }
+    }
+
+    function cadastrar() {
+      const user = document.getElementById('cadastroUser').value.trim();
+      const pass = document.getElementById('cadastroPass').value.trim();
+      const confirmPass = document.getElementById('cadastroConfirmPass').value.trim();
+      
+      // Validações
+      if (!user || !pass || !confirmPass) {
+        alert('Por favor, preencha todos os campos!');
+        return;
+      }
+      
+      if (pass !== confirmPass) {
+        alert('As senhas não coincidem!');
+        return;
+      }
+      
+      if (pass.length < 4) {
+        alert('A senha deve ter pelo menos 4 caracteres!');
+        return;
+      }
+      
+      const usuarios = JSON.parse(localStorage.getItem('usuarios'));
+      
+      // Verifica se usuário já existe
+      if (usuarios.some(u => u.username === user)) {
+        alert('Nome de usuário já está em uso!');
+        return;
+      }
+      
+      // Adiciona novo usuário
+      const novoUsuario = {
+        username: user,
+        password: pass,
+        dataCadastro: new Date().toISOString()
+      };
+      
+      usuarios.push(novoUsuario);
+      localStorage.setItem('usuarios', JSON.stringify(usuarios));
+      
+      alert('Cadastro realizado com sucesso! Faça login para continuar.');
+      toggleForm('login');
+      
+      // Limpa os campos
+      document.getElementById('cadastroUser').value = '';
+      document.getElementById('cadastroPass').value = '';
+      document.getElementById('cadastroConfirmPass').value = '';
+    }
+  </script>
+
+</body>
+</html>
