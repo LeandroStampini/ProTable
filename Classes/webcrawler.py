@@ -16,7 +16,7 @@ if response.status_code==200:
     tb=table_element.find('tbody')
 
             # um for para rodar o nuemro de vezes que tiver tr dentro do tbody 
-    for h in range(len(tb.find_all('tr'))):
+    for h in range(10):
                 #pega todos os td dentro da primeira tabela
         td=table_element.find_all('td')
         aelement = table_element.find_all('a')

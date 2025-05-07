@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///protheus_search.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///protable.db'
 db = SQLAlchemy(app)
 
 class protheus_tabelas(db.Model):
