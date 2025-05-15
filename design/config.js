@@ -10,33 +10,47 @@ let suggestions = []; // Array de sugestões da tabela
 
 // Faz uma solicitação GET para a rota /buscar_dados da sua API
 // Função para buscar dados da API e atualizar a tabela
-function fetchDataAndPopulateTable() {
-    // Fazer a solicitação à API e receber os dados
-    fetch('/buscar_dados')
-      .then(response => response.json())
-      .then(data => {
-        // Selecionar a tabela
-        const table = document.getElementById('data-table');
-  
-        // Limpar o conteúdo atual da tabela
-        while (table.firstChild) {
-          table.removeChild(table.firstChild);
-        }
-  
-        // Loop através dos dados da API e adicionar linhas à tabela
-        data.forEach(item => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td class="py-2 px-1 border border-gray-300 w-1/2 sm:w-1/4">${item.codigo}</td>
-            <td class="py-2 px-4 border border-gray-300 w-1/2 sm:w-3/4">${item.descricao}</td>
-          `;
-          table.appendChild(row);
+async function fetchDataAndPopulateTable() {
+    try {
+        const response = await fetch('http://localhost:5000/buscar_dados', {
+            headers: {
+                'Accept': 'application/json'
+            }
         });
-      })
-      .catch(error => {
-        console.error('Erro ao buscar dados da API:', error);
-      });
-  }
+
+        // Verificação adicional
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new TypeError("A resposta não é JSON");
+        }
+
+        const data = await response.json();
+        
+        // Limpe a tabela corretamente
+        const table = document.getElementById('data-table');
+        const tbody = table.querySelector('tbody') || table.createTBody();
+        tbody.innerHTML = '';
+
+        // Preencha os dados
+        data.forEach(item => {
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                <td class="py-2 px-1 border border-gray-300 w-1/2 sm:w-1/4">${item.codigo}</td>
+                <td class="py-2 px-4 border border-gray-300 w-1/2 sm:w-3/4">${item.descricao}</td>
+            `;
+        });
+    } catch (error) {
+        console.error('Erro detalhado:', error);
+        // Feedback visual para o usuário
+        document.getElementById('data-table').innerHTML = `
+            <tr><td colspan="2" class="text-red-500 p-4 text-center">
+                Erro ao carregar dados: ${error.message}
+            </td></tr>
+        `;
+    }
+}
   
   // Chame a função para buscar dados e atualizar a tabela
 fetchDataAndPopulateTable();
