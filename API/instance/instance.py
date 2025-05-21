@@ -38,9 +38,11 @@ class ProtheusTabelas(db.Model):
 def criar_contexto_aplicacao():
     if ProtheusTabelas.query.first():
         return 
-
-
-    json_path = os.path.join(os.path.dirname(__file__), "API", "crawlerObject.json")
+    json_path = os.path.join(
+        os.path.dirname(__file__),  # API/instance/
+        "..",  # Volta para API/
+        "crawlerObject.json"
+    )
 
     if not os.path.exists(json_path):
         print(f"Arquivo JSON não encontrado: {json_path}")
@@ -59,14 +61,31 @@ def criar_contexto_aplicacao():
 
 @app.route('/buscar_dados', methods=['GET'])
 def buscar_dados():
-    dados = ProtheusTabelas.query.all()
-    resultado = [{'codigo': dado.codigo, 'descricao': dado.descricao} for dado in dados]
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('limit', 20, type=int)
+    search_term = request.args.get('search', '').strip()
+
+    query = ProtheusTabelas.query
+
+    if search_term:
+        search_filter = db.or_(
+            ProtheusTabelas.codigo.ilike(f'%{search_term}%'),
+            ProtheusTabelas.descricao.ilike(f'%{search_term}%')
+        )
+        query = query.filter(search_filter)
+
+    total = query.count()
+    dados = query.offset((page - 1) * per_page).limit(per_page).all()
     
-    # Adicione headers explícitos
-    response = jsonify(resultado)
-    response.headers['Content-Type'] = 'application/json'
-    response.headers['Access-Control-Allow-Origin'] = 'http://127.0.0.1:5500'
-    return response
+    resultado = {
+        'items': [{
+            'codigo': dado.codigo, 
+            'descricao': dado.descricao
+        } for dado in dados],
+        'total': total
+    }
+    
+    return jsonify(resultado)
 
 @app.route('/')
 def index():
@@ -78,6 +97,6 @@ def recursos(filename):
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
-        criar_contexto_aplicacao()
-    app.run(debug=True)
+        db.create_all()  # Cria as tabelas se não existirem
+        criar_contexto_aplicacao() 
+    app.run(host='0.0.0.0', port=5000, debug=True)

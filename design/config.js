@@ -1,361 +1,273 @@
+// Elementos DOM
 const searchInput = document.getElementById('search');
-const searchSuggestions = document.getElementById('searchSuggestions');
 const suggestionList = document.getElementById('suggestionList');
+const searchHistoryInput = document.getElementById('searchHistoryInput');
 const searchHistory = document.getElementById('searchHistory');
-const openHistoryButton = document.getElementById('openHistoryButton');
-const historyModal = document.getElementById('historyModal');
-const closeHistoryButton = document.getElementById('closeHistoryButton');
-const clearHistoryButton = document.getElementById('clearHistoryButton');
-let suggestions = []; // Array de sugestões da tabela
+const elements = {
+    table: document.getElementById('data-table'),
+    tbody: document.querySelector('#data-table tbody'),
+    paginationControls: document.getElementById('paginationControls'),
+    currentPage: document.getElementById('currentPage'),
+    loadingOverlay: document.getElementById('loadingOverlay'),
+    infoContent: document.getElementById('infoContent')
+};
 
-// Faz uma solicitação GET para a rota /buscar_dados da sua API
-// Função para buscar dados da API e atualizar a tabela
-async function fetchDataAndPopulateTable() {
+// Configurações
+const itemsPerPage = 20;
+const searchHistoryKey = 'protable_search_history';
+let currentPage = 1;
+let totalItems = 0;
+let allData = [];
+let filteredData = [];
+let isSearching = false;
+let searchHistoryItems = JSON.parse(localStorage.getItem(searchHistoryKey)) || [];
+
+// Debounce para otimizar pesquisas
+const debounce = (func, timeout = 300) => {
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => func.apply(this, args), timeout);
+    };
+};
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    loadInitialData();
+    renderSearchHistory();
+    setupEventListeners();
+});
+
+// Carregar dados iniciais
+async function loadInitialData() {
+    showLoading();
     try {
-        const response = await fetch('http://localhost:5000/buscar_dados', {
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
+        const response = await fetch(`http://localhost:5000/buscar_dados?page=1&limit=${itemsPerPage}`);
+        const data = await response.json();
+        allData = data.items;
+        totalItems = data.total;
+        populateTable(allData);
+        updatePaginationControls();
+    } catch (error) {
+        handleDataError(error);
+    } finally {
+        hideLoading();
+    }
+}
 
-        // Verificação adicional
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+// Popular tabela com dados
+function populateTable(items) {
+    const fragment = document.createDocumentFragment();
+    
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 smooth-transition';
+        row.innerHTML = `
+            <td class="py-2 px-4 border">${item.codigo}</td>
+            <td class="py-2 px-4 border">${item.descricao}</td>
+        `;
+        row.addEventListener('click', () => showItemDetails(item));
+        fragment.appendChild(row);
+    });
+
+    elements.tbody.innerHTML = '';
+    elements.tbody.appendChild(fragment);
+}
+
+// Mostrar detalhes do item
+function showItemDetails(item) {
+    elements.infoContent.innerHTML = `
+        <h3 class="font-bold text-lg mb-2">${item.codigo}</h3>
+        <p class="mb-2">${item.descricao}</p>
+        <p class="text-sm text-gray-500">Última atualização: ${new Date().toLocaleString()}</p>
+    `;
+}
+
+// Buscar dados com paginação
+async function fetchPaginatedData(page) {
+    showLoading();
+    try {
+        const url = isSearching 
+            ? `http://localhost:5000/buscar_dados?search=${encodeURIComponent(searchInput.value)}&page=${page}&limit=${itemsPerPage}`
+            : `http://localhost:5000/buscar_dados?page=${page}&limit=${itemsPerPage}`;
         
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new TypeError("A resposta não é JSON");
-        }
-
+        const response = await fetch(url);
         const data = await response.json();
         
-        // Limpe a tabela corretamente
-        const table = document.getElementById('data-table');
-        const tbody = table.querySelector('tbody') || table.createTBody();
-        tbody.innerHTML = '';
-
-        // Preencha os dados
-        data.forEach(item => {
-            const row = tbody.insertRow();
-            row.innerHTML = `
-                <td class="py-2 px-1 border border-gray-300 w-1/2 sm:w-1/4">${item.codigo}</td>
-                <td class="py-2 px-4 border border-gray-300 w-1/2 sm:w-3/4">${item.descricao}</td>
-            `;
-        });
+        filteredData = data.items;
+        totalItems = data.total;
+        populateTable(filteredData);
+        updatePaginationControls();
     } catch (error) {
-        console.error('Erro detalhado:', error);
-        // Feedback visual para o usuário
-        document.getElementById('data-table').innerHTML = `
-            <tr><td colspan="2" class="text-red-500 p-4 text-center">
-                Erro ao carregar dados: ${error.message}
-            </td></tr>
-        `;
+        handleDataError(error);
+    } finally {
+        hideLoading();
     }
 }
-  
-  // Chame a função para buscar dados e atualizar a tabela
-fetchDataAndPopulateTable();
-  
- // Variável global para armazenar a pesquisa completa
- var pesquisaCompleta = "";
 
- // Função para verificar se o Enter foi pressionado
- function verificarEnter(event) {
-   if (event.keyCode === 13) {
-     // Quando o usuário pressiona Enter, armazene o valor completo da pesquisa
-     pesquisaCompleta = document.getElementById("search").value;
-   }
- }
-
- // Função para armazenar o valor da pesquisa quando o usuário sai do campo de pesquisa
- function armazenarPesquisa() {
-   // Obtenha o valor digitado pelo usuário
-   var valorDaPesquisa = document.getElementById("search").value;
-
-   // Atualize a pesquisa completa apenas se o valor não estiver vazio
-   if (valorDaPesquisa.trim() !== "") {
-     pesquisaCompleta = valorDaPesquisa;
-   }
-
-   // Faça algo com o valor da pesquisa completa
-   console.log("Valor da pesquisa completa: " + pesquisaCompleta);
- }
-
-clearHistoryButton.addEventListener('click', () => {
-    confirmationMessage.classList.remove('hidden'); // Mostra a mensagem de confirmação
-});
-
-confirmDeleteButton.addEventListener('click', () => {
-    clearSearchHistory(); // Limpa o histórico de pesquisa
-    confirmationMessage.classList.add('hidden'); // Oculta a mensagem de confirmação
-});
-
-cancelDeleteButton.addEventListener('click', () => {
-    confirmationMessage.classList.add('hidden'); // Oculta a mensagem de confirmação
-});
-document.getElementById('confirmDeleteButton').addEventListener('click', () => {
-    clearSearchHistory();
-    showSuccessMessage();
-});
-
-function showSuccessMessage() {
-    const successMessage = document.getElementById('successMessage');
-    successMessage.classList.remove('hidden');
-
-    setTimeout(() => {
-        successMessage.classList.add('hidden');
-    }, 1500); // Esconde a mensagem de sucesso após 3 segundos (ajustado para 3 segundos)
+// Atualizar controles de paginação
+function updatePaginationControls() {
+    elements.currentPage.textContent = `Página ${currentPage} de ${Math.ceil(totalItems/itemsPerPage)}`;
+    document.getElementById('prevPage').disabled = currentPage === 1;
+    document.getElementById('nextPage').disabled = (currentPage * itemsPerPage) >= totalItems;
 }
 
-// Barra de Pesquisa no Histórico
-// Barra de Pesquisa no Histórico
-const searchHistoryInput = document.getElementById('searchHistoryInput');
-searchHistoryInput.addEventListener('input', () => {
-    filterSearchHistory();
-});
-
-// Filtra o Histórico de Pesquisa com base no que o usuário digita
-function filterSearchHistory() {
-    const query = searchHistoryInput.value.toLowerCase();
-    const historyItems = document.querySelectorAll('#searchHistory li');
-    historyItems.forEach(item => {
-        const text = item.textContent.toLowerCase();
-        if (text.includes(query)) {
-            // Remove tags <mark> existentes para redefinir o destaque
-            item.innerHTML = item.textContent;
-            // Destaca o texto correspondente
-            const highlightedText = highlightMatch(item.textContent, query);
-            item.innerHTML = highlightedText;
-            item.style.display = 'block';
-        } else {
-            item.style.display = 'none';
-        }
-    });
+// Manipulação do histórico de pesquisa
+function addToSearchHistory(query) {
+    if (!query.trim()) return;
+    
+    // Remove duplicatas e limita a 10 itens
+    searchHistoryItems = searchHistoryItems.filter(item => item.toLowerCase() !== query.toLowerCase());
+    searchHistoryItems.unshift(query);
+    searchHistoryItems = searchHistoryItems.slice(0, 10);
+    
+    localStorage.setItem(searchHistoryKey, JSON.stringify(searchHistoryItems));
+    renderSearchHistory();
 }
 
-// Função para destacar o texto correspondente com tags <mark>
-function highlightMatch(text, query) {
-    const regex = new RegExp(`(${query})`, 'gi');
-    return text.replace(regex, '<mark>$1</mark>');
+function renderSearchHistory() {
+    const filtered = searchHistoryInput.value
+        ? searchHistoryItems.filter(item => item.toLowerCase().includes(searchHistoryInput.value.toLowerCase()))
+        : searchHistoryItems;
+    
+    searchHistory.innerHTML = filtered.map(item => `
+        <li class="p-3 hover:bg-gray-100 rounded-lg cursor-pointer flex justify-between items-center"
+            onclick="applySearchFromHistory('${escapeHtml(item)}')">
+            <span>${item}</span>
+            <button class="text-red-500 hover:text-red-700" 
+                    onclick="removeFromHistory(event, '${escapeHtml(item)}')">
+                <i class="fas fa-times"></i>
+            </button>
+        </li>
+    `).join('');
 }
-// Verifica se o histórico já foi limpado antes
-const hasHistoryCleared = localStorage.getItem('historyCleared');
-
-// Se o histórico já foi limpado antes, esconde a mensagem de sucesso
-if (hasHistoryCleared) {
-    const successMessage = document.getElementById('successMessage');
-    successMessage.classList.add('hidden');
-}
-
-clearHistoryButton.addEventListener('click', () => {
-    // Se o histórico já foi limpado antes, não faz nada
-    if (hasHistoryCleared) {
-        return;
-    }
-
-    // Caso contrário, exibe a mensagem de sucesso e define que o histórico já foi limpado
-    showSuccessMessage();
-    localStorage.setItem('historyCleared', 'true');
-});
 
 function clearSearchHistory() {
-    localStorage.removeItem('searchHistory'); // Remove o histórico do localStorage
-    searchHistory.innerHTML = ''; // Limpa a lista de histórico exibida na página
-    hideHistoryModal(); // Fecha o modal de histórico de pesquisa
+    searchHistoryItems = [];
+    localStorage.removeItem(searchHistoryKey);
+    renderSearchHistory();
+    showSuccessMessage();
 }
 
-// Extrai sugestões da tabela
-const tableRows = document.querySelectorAll('table tbody tr');
-tableRows.forEach(row => {
-    const campo = row.querySelector('td:nth-child(1)').textContent.trim();
-    const descricao = row.querySelector('td:nth-child(2)').textContent.trim();
-    suggestions.push(`${campo} - ${descricao}`);
-});
+// Funções auxiliares
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
-searchInput.addEventListener('input', () => {
-    displaySearchSuggestions();
-});
+function showSuccessMessage() {
+    const msg = document.getElementById('successMessage');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
+}
 
-searchInput.addEventListener('click', () => {
-    displaySearchSuggestions();
-});
+function showLoading() {
+    elements.loadingOverlay.classList.remove('hidden');
+}
 
-searchInput.addEventListener('keydown', (event) => {
-// Dentro do evento de pressionar Enter no campo de pesquisa
-if (event.key === 'Enter') {
-    const selectedSuggestion = suggestionList.querySelector('li.active');
-    if (selectedSuggestion) {
-        // Se uma sugestão estiver selecionada, use o valor da sugestão como pesquisa
-        const suggestionValue = selectedSuggestion.textContent;
-        searchInput.value = suggestionValue;
+function hideLoading() {
+    elements.loadingOverlay.classList.add('hidden');
+}
 
-        // Salve a pesquisa no histórico
-        addToSearchHistory(suggestionValue);
+function handleDataError(error) {
+    console.error('Erro:', error);
+    elements.tbody.innerHTML = `
+        <tr>
+            <td colspan="2" class="text-red-500 p-4 text-center">
+                Erro ao carregar dados: ${error.message}
+            </td>
+        </tr>
+    `;
+}
 
-        // Oculte as sugestões
-        searchSuggestions.classList.add('hidden');
-
-        // Limpa a classe "active" da sugestão selecionada
-        selectedSuggestion.classList.remove('active');
-    } else {
-        // Se nenhuma sugestão estiver selecionada, use o valor do campo de pesquisa
+// Configuração de eventos
+function setupEventListeners() {
+    // Pesquisa principal
+    searchInput.addEventListener('input', debounce(() => {
         const query = searchInput.value.trim();
-        if (query !== '') {
-            // Salve a pesquisa no histórico
-            addToSearchHistory(query);
+        if (query) {
+            isSearching = true;
+            currentPage = 1;
+            fetchPaginatedData(currentPage);
+        } else {
+            isSearching = false;
+            currentPage = 1;
+            fetchPaginatedData(currentPage);
         }
-    }
+    }));
 
-    // Limpa o campo de pesquisa após salvar a pesquisa no histórico
-    searchInput.value = '';
-
-    // Oculta as sugestões após pressionar Enter
-    searchSuggestions.classList.add('hidden');
-} else if (event.key === 'Tab') {
-        if (!searchSuggestions.classList.contains('hidden') && suggestions.length > 0) {
-            event.preventDefault(); // Impede o comportamento padrão da tecla "TAB"
-            const selectedSuggestion = suggestionList.querySelector('li.active');
-            if (!selectedSuggestion) {
-                // Se nenhuma sugestão estiver selecionada, selecione a primeira sugestão
-                const firstSuggestion = suggestionList.querySelector('li');
-                if (firstSuggestion) {
-                    firstSuggestion.classList.add('active', 'suggestion-indicator');
-                    searchInput.value = firstSuggestion.textContent; // Preenche a barra de pesquisa com a primeira sugestão
-                }
-            } else {
-                // Desselecione a sugestão atual
-                selectedSuggestion.classList.remove('active', 'suggestion-indicator');
-                // Encontre a próxima sugestão
-                const nextSuggestion = selectedSuggestion.nextSibling;
-                if (nextSuggestion) {
-                    // Se houver uma próxima sugestão, selecione-a
-                    nextSuggestion.classList.add('active', 'suggestion-indicator');
-                    searchInput.value = nextSuggestion.textContent; // Preenche a barra de pesquisa com a sugestão selecionada
-                } else {
-                    // Se não houver próxima sugestão, selecione a primeira sugestão
-                    const firstSuggestion = suggestionList.querySelector('li');
-                    if (firstSuggestion) {
-                        firstSuggestion.classList.add('active', 'suggestion-indicator');
-                        searchInput.value = firstSuggestion.textContent; // Preenche a barra de pesquisa com a primeira sugestão
-                    }
-                }
+    // Salvar pesquisa apenas ao pressionar Enter
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const query = searchInput.value.trim();
+            if (query) {
+                addToSearchHistory(query);
             }
-        }
-    }
-});
-// Fechar a lista de sugestões ao pressionar a tecla 'ESC'
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        searchSuggestions.classList.add('hidden');
-    }
-});
-searchInput.addEventListener('click', (event) => {
-    event.stopPropagation();
-});
-
-// Fechar a lista de sugestões ao clicar em qualquer lugar da tela (exceto na barra de pesquisa)
-document.addEventListener('click', (event) => {
-    const isSearchInput = event.target === searchInput;
-    const isSuggestionList = event.target === suggestionList || suggestionList.contains(event.target);
-
-    if (!isSearchInput && !isSuggestionList) {
-        searchSuggestions.classList.add('hidden');
-    }
-});
-
-// Adicione um evento de escuta para desativar a sugestão selecionada ao clicar em qualquer lugar da página
-document.addEventListener('click', () => {
-    const selectedSuggestion = suggestionList.querySelector('li.active');
-    if (selectedSuggestion) {
-        selectedSuggestion.classList.remove('active');
-    }
-});
-
-function scrollToTableRow(query) {
-    const tableRow = document.getElementById(query);
-    if (tableRow) {
-        tableRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-}
-openHistoryButton.addEventListener('click', () => {
-    showHistoryModal();
-});
-
-closeHistoryButton.addEventListener('click', () => {
-    hideHistoryModal();
-});
-
-
-function displaySearchSuggestions() {
-    const userQuery = searchInput.value.toLowerCase();
-    suggestionList.innerHTML = '';
-
-    if (userQuery === '') {
-        searchSuggestions.classList.add('hidden');
-        return;
-    }
-
-    let found = false;
-
-    suggestions.forEach(suggestion => {
-        const suggestionLC = suggestion.toLowerCase();
-        if (suggestionLC.includes(userQuery)) {
-            found = true;
-            const li = document.createElement('li');
-            const highlightedSuggestion = highlightMatch(suggestion, userQuery);
-            li.innerHTML = highlightedSuggestion;
-            li.addEventListener('click', () => {
-                searchInput.value = suggestion; // Preenche a barra de pesquisa com a sugestão completa
-                searchSuggestions.classList.add('hidden'); // Esconde as sugestões
-                searchInput.focus(); // Move o foco de volta para a barra de pesquisa
-        });
-            suggestionList.appendChild(li);
         }
     });
 
-    if (!found) {
-        searchSuggestions.classList.add('hidden');
-        return;
-    }
+    // Controles de paginação
+    document.getElementById('nextPage').addEventListener('click', () => {
+        currentPage++;
+        fetchPaginatedData(currentPage);
+    });
 
-    searchSuggestions.classList.remove('hidden');
+    document.getElementById('prevPage').addEventListener('click', () => {
+        currentPage = Math.max(1, currentPage - 1);
+        fetchPaginatedData(currentPage);
+    });
+
+    // Histórico de pesquisa
+    document.getElementById('openHistoryButton').addEventListener('click', () => {
+        document.getElementById('historyModal').classList.remove('hidden');
+    });
+
+    document.getElementById('closeHistoryButton').addEventListener('click', () => {
+        document.getElementById('historyModal').classList.add('hidden');
+    });
+
+    document.getElementById('clearHistoryButton').addEventListener('click', () => {
+        if (confirm('Tem certeza que deseja limpar todo o histórico de pesquisas?')) {
+            clearSearchHistory();
+        }
+    });
+
+    searchHistoryInput.addEventListener('input', () => {
+        renderSearchHistory();
+    });
+
+    // Fechar modais ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (e.target === document.getElementById('historyModal')) {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+    });
+
+    // Tecla ESC para fechar modais
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.getElementById('historyModal').classList.add('hidden');
+            document.getElementById('searchSuggestions').classList.add('hidden');
+        }
+    });
 }
 
+// Funções globais para uso no HTML
+window.applySearchFromHistory = (query) => {
+    searchInput.value = query;
+    document.getElementById('historyModal').classList.add('hidden');
+    isSearching = true;
+    currentPage = 1;
+    fetchPaginatedData(currentPage);
+};
 
-function highlightMatch(suggestion, query) {
-    const regex = new RegExp(`(${query})`, 'gi');
-    return suggestion.replace(regex, '<span class="bg-yellow-300">$1</span>');
-}
-
-function addToSearchHistory(query) {
-    const now = new Date();
-    const formattedDate = now.toLocaleDateString(); // Apenas a data, sem a hora
-
-    const historyItem = {
-        query: query,
-        date: formattedDate,
-    };
-
-    const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
-    history.push(historyItem);
-    localStorage.setItem('searchHistory', JSON.stringify(history));
-
-    const li = document.createElement('li');
-    li.textContent = `${formattedDate}: ${query}`;
-    searchHistory.appendChild(li);
-}
-
-function showHistoryModal() {
-    historyModal.classList.remove('hidden');
-}
-
-function hideHistoryModal() {
-    historyModal.classList.add('hidden');
-}
-
-// Recupera e exibe o histórico de pesquisa ao carregar a página
-const savedHistory = JSON.parse(localStorage.getItem('searchHistory')) || [];
-savedHistory.forEach(historyItem => {
-    const li = document.createElement('li');
-    li.textContent = `${historyItem.date}: ${historyItem.query}`;
-    searchHistory.appendChild(li);
-});
+window.removeFromHistory = (event, query) => {
+    event.stopPropagation();
+    searchHistoryItems = searchHistoryItems.filter(item => item !== query);
+    localStorage.setItem(searchHistoryKey, JSON.stringify(searchHistoryItems));
+    renderSearchHistory();
+};
