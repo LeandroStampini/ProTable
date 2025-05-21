@@ -7,6 +7,7 @@ const API_BASE = 'http://localhost:5000';
 const searchInput = document.getElementById('search');
 const suggestionContainer = document.getElementById('searchSuggestions');
 const suggestionUl = document.getElementById('suggestionList');
+const resetButton = document.getElementById('resetSearchButton');
 const searchHistoryInput = document.getElementById('searchHistoryInput');
 const searchHistory = document.getElementById('searchHistory');
 
@@ -183,6 +184,13 @@ function setupEventListeners() {
         }
     });
 
+    resetButton.addEventListener('click', () => {
+        isSearching = false;
+        lastSearchTerm = '';
+        searchInput.value = '';
+        fetchPaginatedData(1);
+    });
+
     document.getElementById('nextPage').addEventListener('click', () => {
         currentPage++;
         fetchPaginatedData(currentPage);
@@ -248,7 +256,7 @@ function escapeHtml(unsafe) {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
+        .replace(/\"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
 function showSuccessMessage() {
