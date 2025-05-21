@@ -1,12 +1,17 @@
+// config.js
+
+// Base da API
+const API_BASE = 'http://localhost:5000';
+
 // Elementos DOM
 const searchInput = document.getElementById('search');
-const suggestionList = document.getElementById('suggestionList');
+const suggestionContainer = document.getElementById('searchSuggestions');
+const suggestionUl = document.getElementById('suggestionList');
 const searchHistoryInput = document.getElementById('searchHistoryInput');
 const searchHistory = document.getElementById('searchHistory');
+
 const elements = {
-    table: document.getElementById('data-table'),
     tbody: document.querySelector('#data-table tbody'),
-    paginationControls: document.getElementById('paginationControls'),
     currentPage: document.getElementById('currentPage'),
     loadingOverlay: document.getElementById('loadingOverlay'),
     infoContent: document.getElementById('infoContent')
@@ -17,19 +22,17 @@ const itemsPerPage = 20;
 const searchHistoryKey = 'protable_search_history';
 let currentPage = 1;
 let totalItems = 0;
-let allData = [];
-let filteredData = [];
 let isSearching = false;
-let searchHistoryItems = JSON.parse(localStorage.getItem(searchHistoryKey)) || [];
+let lastSearchTerm = '';
 
-// Debounce para otimizar pesquisas
-const debounce = (func, timeout = 300) => {
-    let timer;
-    return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => func.apply(this, args), timeout);
-    };
-};
+// Carrega e normaliza histórico (strings → objetos)
+const rawHistory = JSON.parse(localStorage.getItem(searchHistoryKey)) || [];
+let searchHistoryItems = rawHistory.map(item => {
+    if (typeof item === 'string') {
+        return { query: item, timestamp: new Date().toISOString() };
+    }
+    return item;
+});
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
@@ -42,23 +45,21 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadInitialData() {
     showLoading();
     try {
-        const response = await fetch(`http://localhost:5000/buscar_dados?page=1&limit=${itemsPerPage}`);
-        const data = await response.json();
-        allData = data.items;
+        const resp = await fetch(`${API_BASE}/buscar_dados?page=1&limit=${itemsPerPage}`);
+        const data = await resp.json();
         totalItems = data.total;
-        populateTable(allData);
+        populateTable(data.items);
         updatePaginationControls();
-    } catch (error) {
-        handleDataError(error);
+    } catch (err) {
+        handleDataError(err);
     } finally {
         hideLoading();
     }
 }
 
-// Popular tabela com dados
+// Popular tabela
 function populateTable(items) {
-    const fragment = document.createDocumentFragment();
-    
+    const frag = document.createDocumentFragment();
     items.forEach(item => {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 smooth-transition';
@@ -67,14 +68,13 @@ function populateTable(items) {
             <td class="py-2 px-4 border">${item.descricao}</td>
         `;
         row.addEventListener('click', () => showItemDetails(item));
-        fragment.appendChild(row);
+        frag.appendChild(row);
     });
-
     elements.tbody.innerHTML = '';
-    elements.tbody.appendChild(fragment);
+    elements.tbody.appendChild(frag);
 }
 
-// Mostrar detalhes do item
+// Detalhes do item
 function showItemDetails(item) {
     elements.infoContent.innerHTML = `
         <h3 class="font-bold text-lg mb-2">${item.codigo}</h3>
@@ -83,59 +83,57 @@ function showItemDetails(item) {
     `;
 }
 
-// Buscar dados com paginação
+// Busca paginada
 async function fetchPaginatedData(page) {
     showLoading();
     try {
-        const url = isSearching 
-            ? `http://localhost:5000/buscar_dados?search=${encodeURIComponent(searchInput.value)}&page=${page}&limit=${itemsPerPage}`
-            : `http://localhost:5000/buscar_dados?page=${page}&limit=${itemsPerPage}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        filteredData = data.items;
+        const params = new URLSearchParams({ page, limit: itemsPerPage });
+        if (isSearching && lastSearchTerm) params.set('search', lastSearchTerm);
+        const resp = await fetch(`${API_BASE}/buscar_dados?${params.toString()}`);
+        const data = await resp.json();
         totalItems = data.total;
-        populateTable(filteredData);
+        populateTable(data.items);
         updatePaginationControls();
-    } catch (error) {
-        handleDataError(error);
+    } catch (err) {
+        handleDataError(err);
     } finally {
         hideLoading();
     }
 }
 
-// Atualizar controles de paginação
+// Atualiza paginação
 function updatePaginationControls() {
-    elements.currentPage.textContent = `Página ${currentPage} de ${Math.ceil(totalItems/itemsPerPage)}`;
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+    elements.currentPage.textContent = `Página ${currentPage} de ${totalPages}`;
     document.getElementById('prevPage').disabled = currentPage === 1;
-    document.getElementById('nextPage').disabled = (currentPage * itemsPerPage) >= totalItems;
+    document.getElementById('nextPage').disabled = currentPage >= totalPages;
 }
 
-// Manipulação do histórico de pesquisa
+// Histórico
 function addToSearchHistory(query) {
-    if (!query.trim()) return;
-    
-    // Remove duplicatas e limita a 10 itens
-    searchHistoryItems = searchHistoryItems.filter(item => item.toLowerCase() !== query.toLowerCase());
-    searchHistoryItems.unshift(query);
+    const timestamp = new Date().toISOString();
+    searchHistoryItems = searchHistoryItems
+        .filter(item => item.query.toLowerCase() !== query.toLowerCase());
+    searchHistoryItems.unshift({ query, timestamp });
     searchHistoryItems = searchHistoryItems.slice(0, 10);
-    
     localStorage.setItem(searchHistoryKey, JSON.stringify(searchHistoryItems));
     renderSearchHistory();
 }
 
 function renderSearchHistory() {
-    const filtered = searchHistoryInput.value
-        ? searchHistoryItems.filter(item => item.toLowerCase().includes(searchHistoryInput.value.toLowerCase()))
-        : searchHistoryItems;
-    
-    searchHistory.innerHTML = filtered.map(item => `
+    const filter = searchHistoryInput.value.trim().toLowerCase();
+    const list = searchHistoryItems.filter(item =>
+        item.query.toLowerCase().includes(filter)
+    );
+    searchHistory.innerHTML = list.map(item => `
         <li class="p-3 hover:bg-gray-100 rounded-lg cursor-pointer flex justify-between items-center"
-            onclick="applySearchFromHistory('${escapeHtml(item)}')">
-            <span>${item}</span>
-            <button class="text-red-500 hover:text-red-700" 
-                    onclick="removeFromHistory(event, '${escapeHtml(item)}')">
+            onclick="applySearchFromHistory('${escapeHtml(item.query)}')">
+            <div>
+                <span>${item.query}</span><br>
+                <small class="text-gray-500">${new Date(item.timestamp).toLocaleString()}</small>
+            </div>
+            <button class="text-red-500 hover:text-red-700"
+                    onclick="removeFromHistory(event, '${escapeHtml(item.query)}')">
                 <i class="fas fa-times"></i>
             </button>
         </li>
@@ -149,7 +147,102 @@ function clearSearchHistory() {
     showSuccessMessage();
 }
 
-// Funções auxiliares
+// Sugestões
+function renderSuggestions() {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) return suggestionContainer.classList.add('hidden');
+    const matches = searchHistoryItems
+        .filter(item => item.query.toLowerCase().includes(q))
+        .slice(0, 5);
+    if (!matches.length) return suggestionContainer.classList.add('hidden');
+    suggestionUl.innerHTML = matches.map(item => `
+        <li class="px-4 py-2" onclick="applySuggestion('${escapeHtml(item.query)}')">
+            <div>${item.query}</div>
+            <small class="text-gray-400">${new Date(item.timestamp).toLocaleTimeString()}</small>
+        </li>
+    `).join('');
+    suggestionContainer.classList.remove('hidden');
+}
+
+// Eventos
+function setupEventListeners() {
+    searchInput.addEventListener('input', renderSuggestions);
+
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const q = searchInput.value.trim();
+            if (!q) return;
+            addToSearchHistory(q);
+            lastSearchTerm = q;
+            searchInput.value = '';
+            suggestionContainer.classList.add('hidden');
+            isSearching = true;
+            currentPage = 1;
+            fetchPaginatedData(currentPage);
+        }
+    });
+
+    document.getElementById('nextPage').addEventListener('click', () => {
+        currentPage++;
+        fetchPaginatedData(currentPage);
+    });
+    document.getElementById('prevPage').addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            fetchPaginatedData(currentPage);
+        }
+    });
+
+    document.getElementById('openHistoryButton').addEventListener('click', () => {
+        document.getElementById('historyModal').classList.remove('hidden');
+    });
+    document.getElementById('closeHistoryButton').addEventListener('click', () => {
+        document.getElementById('historyModal').classList.add('hidden');
+    });
+    document.getElementById('clearHistoryButton').addEventListener('click', () => {
+        if (confirm('Tem certeza que deseja limpar todo o histórico de pesquisas?')) {
+            clearSearchHistory();
+        }
+    });
+    searchHistoryInput.addEventListener('input', renderSearchHistory);
+
+    document.addEventListener('click', e => {
+        if (e.target === document.getElementById('historyModal')) {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            document.getElementById('historyModal').classList.add('hidden');
+            suggestionContainer.classList.add('hidden');
+        }
+    });
+}
+
+// Funções Globais
+window.applySearchFromHistory = query => {
+    lastSearchTerm = query;
+    isSearching = true;
+    currentPage = 1;
+    document.getElementById('historyModal').classList.add('hidden');
+    fetchPaginatedData(currentPage);
+};
+window.removeFromHistory = (e, query) => {
+    e.stopPropagation();
+    searchHistoryItems = searchHistoryItems.filter(item => item.query !== query);
+    localStorage.setItem(searchHistoryKey, JSON.stringify(searchHistoryItems));
+    renderSearchHistory();
+};
+window.applySuggestion = query => {
+    lastSearchTerm = query;
+    isSearching = true;
+    currentPage = 1;
+    suggestionContainer.classList.add('hidden');
+    fetchPaginatedData(currentPage);
+};
+
+// Auxiliares
 function escapeHtml(unsafe) {
     return unsafe
         .replace(/&/g, "&amp;")
@@ -158,21 +251,17 @@ function escapeHtml(unsafe) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
-
 function showSuccessMessage() {
     const msg = document.getElementById('successMessage');
     msg.classList.remove('hidden');
     setTimeout(() => msg.classList.add('hidden'), 3000);
 }
-
 function showLoading() {
     elements.loadingOverlay.classList.remove('hidden');
 }
-
 function hideLoading() {
     elements.loadingOverlay.classList.add('hidden');
 }
-
 function handleDataError(error) {
     console.error('Erro:', error);
     elements.tbody.innerHTML = `
@@ -180,94 +269,5 @@ function handleDataError(error) {
             <td colspan="2" class="text-red-500 p-4 text-center">
                 Erro ao carregar dados: ${error.message}
             </td>
-        </tr>
-    `;
+        </tr>`;
 }
-
-// Configuração de eventos
-function setupEventListeners() {
-    // Pesquisa principal
-    searchInput.addEventListener('input', debounce(() => {
-        const query = searchInput.value.trim();
-        if (query) {
-            isSearching = true;
-            currentPage = 1;
-            fetchPaginatedData(currentPage);
-        } else {
-            isSearching = false;
-            currentPage = 1;
-            fetchPaginatedData(currentPage);
-        }
-    }));
-
-    // Salvar pesquisa apenas ao pressionar Enter
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const query = searchInput.value.trim();
-            if (query) {
-                addToSearchHistory(query);
-            }
-        }
-    });
-
-    // Controles de paginação
-    document.getElementById('nextPage').addEventListener('click', () => {
-        currentPage++;
-        fetchPaginatedData(currentPage);
-    });
-
-    document.getElementById('prevPage').addEventListener('click', () => {
-        currentPage = Math.max(1, currentPage - 1);
-        fetchPaginatedData(currentPage);
-    });
-
-    // Histórico de pesquisa
-    document.getElementById('openHistoryButton').addEventListener('click', () => {
-        document.getElementById('historyModal').classList.remove('hidden');
-    });
-
-    document.getElementById('closeHistoryButton').addEventListener('click', () => {
-        document.getElementById('historyModal').classList.add('hidden');
-    });
-
-    document.getElementById('clearHistoryButton').addEventListener('click', () => {
-        if (confirm('Tem certeza que deseja limpar todo o histórico de pesquisas?')) {
-            clearSearchHistory();
-        }
-    });
-
-    searchHistoryInput.addEventListener('input', () => {
-        renderSearchHistory();
-    });
-
-    // Fechar modais ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (e.target === document.getElementById('historyModal')) {
-            document.getElementById('historyModal').classList.add('hidden');
-        }
-    });
-
-    // Tecla ESC para fechar modais
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            document.getElementById('historyModal').classList.add('hidden');
-            document.getElementById('searchSuggestions').classList.add('hidden');
-        }
-    });
-}
-
-// Funções globais para uso no HTML
-window.applySearchFromHistory = (query) => {
-    searchInput.value = query;
-    document.getElementById('historyModal').classList.add('hidden');
-    isSearching = true;
-    currentPage = 1;
-    fetchPaginatedData(currentPage);
-};
-
-window.removeFromHistory = (event, query) => {
-    event.stopPropagation();
-    searchHistoryItems = searchHistoryItems.filter(item => item !== query);
-    localStorage.setItem(searchHistoryKey, JSON.stringify(searchHistoryItems));
-    renderSearchHistory();
-};
