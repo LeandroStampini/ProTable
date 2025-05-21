@@ -79,13 +79,3 @@ if response.status_code==200:
                 crawlerObject.append(itens)
                 with open("crawlerObject.json", "w") as arquivo_json:
                     json.dump(crawlerObject, arquivo_json,indent=4)
-
-                
-
-        
-            
-
-
-        
-
-
